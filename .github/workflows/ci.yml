@@ -9,13 +9,21 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[dev]"
+      - uses: actions/setup-java@v4  # Spark 4 needs Java 17+
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/cache@v4  # Delta jars downloaded by Spark on first run
+        with:
+          path: ~/.ivy2.5.2
+          key: ivy-${{ hashFiles('pyproject.toml') }}
+      - run: pip install -e ".[dev,spark]"
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest

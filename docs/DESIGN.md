@@ -91,3 +91,19 @@ Per stream `(aircraft_id, msg_type)`:
   A gap detector only sees holes *between* two received messages, so losses at
   the very start or end of a stream are invisible to it. Silver's gap count
   should equal this number exactly.
+
+## Bronze table (`bronze/telemetry_raw`)
+
+| column               | type      | notes                                             |
+|----------------------|-----------|---------------------------------------------------|
+| `raw_line`           | string    | the line exactly as received, never parsed here   |
+| `_source_file`       | string    | landing file it came from (lineage, replay)       |
+| `_source_file_mtime` | timestamp | when that file was written                        |
+| `_ingest_ts`         | timestamp | when bronze ingested it                           |
+
+- **Why not parse JSON in bronze?** Corrupt lines must survive so silver can
+  quarantine and count them. Bronze is the "we received exactly this" log.
+- **Why streaming for a batch job?** `trigger(availableNow=True)` + checkpoint
+  = process only new files, then stop. Re-runs are idempotent at the file level.
+- **Why no partitioning?** ~100k rows. Partitioning tiny tables creates many
+  tiny files and slows reads. Revisit at real volume (e.g. by ingest date).
