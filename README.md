@@ -1,7 +1,8 @@
 # uav-telemetry-lakehouse
 
 Synthetic UAV telemetry through a bronze / silver / gold Delta Lake pipeline
-(PySpark + Delta Lake, locally, then on AWS and Databricks).
+(PySpark + Delta Lake). Runs entirely on free tools: local Spark, MinIO
+(S3-compatible object storage) and Databricks Free Edition.
 
 > **All data is synthetic.** Message types, fields and values are invented for
 > this repo and do not mirror any real protocol, interface document or flight data.
@@ -17,7 +18,7 @@ Design, data model and fault model: [docs/DESIGN.md](docs/DESIGN.md)
 | 3 | Silver: parse, dedupe, schema, gap detection | |
 | 4 | Gold + SQL: rates, loss %, latency | |
 | 5 | CI | lint + tests running |
-| 6 | AWS, then Databricks Free Edition | |
+| 6 | S3-compatible storage (MinIO), then Databricks Free Edition | |
 
 ## Quick start
 

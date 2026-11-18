@@ -20,7 +20,7 @@ uav-telemetry-lakehouse/
 │   └── gold/             # step 4: per-aircraft rates, loss %, latency
 ├── sql/                  # step 4: SQL on top of gold (written by hand)
 ├── tests/                # pytest, one folder per layer
-├── infra/aws/            # step 6: S3 + Glue/Athena or EMR Serverless, teardown
+├── infra/                # step 6: MinIO (local S3-compatible storage), Databricks
 ├── docs/                 # this file, architecture diagram
 └── .github/workflows/    # CI: lint + tests
 ```
