@@ -20,7 +20,7 @@ uav-telemetry-lakehouse/
 │   └── gold/             # step 4: per-aircraft rates, loss %, latency
 ├── sql/                  # step 4: SQL on top of gold (written by hand)
 ├── tests/                # pytest, one folder per layer
-├── infra/aws/            # step 6: S3 + Glue/Athena or EMR Serverless, teardown
+├── infra/                # step 6: MinIO (local S3-compatible storage), Databricks
 ├── docs/                 # this file, architecture diagram
 └── .github/workflows/    # CI: lint + tests
 ```
@@ -91,3 +91,83 @@ Per stream `(aircraft_id, msg_type)`:
   A gap detector only sees holes *between* two received messages, so losses at
   the very start or end of a stream are invisible to it. Silver's gap count
   should equal this number exactly.
+
+## Bronze table (`bronze/telemetry_raw`)
+
+| column               | type      | notes                                             |
+|----------------------|-----------|---------------------------------------------------|
+| `raw_line`           | string    | the line exactly as received, never parsed here   |
+| `_source_file`       | string    | landing file it came from (lineage, replay)       |
+| `_source_file_mtime` | timestamp | when that file was written                        |
+| `_ingest_ts`         | timestamp | when bronze ingested it                           |
+
+- **Why not parse JSON in bronze?** Corrupt lines must survive so silver can
+  quarantine and count them. Bronze is the "we received exactly this" log.
+- **Why streaming for a batch job?** `trigger(availableNow=True)` + checkpoint
+  = process only new files, then stop. Re-runs are idempotent at the file level.
+- **Why no partitioning?** ~100k rows. Partitioning tiny tables creates many
+  tiny files and slows reads. Revisit at real volume (e.g. by ingest date).
+
+## Silver tables
+
+**`silver/telemetry`**: one row per message key `(aircraft_id, msg_type, seq)`.
+Columns: the key, `event_ts`, `recv_ts` (UTC timestamps), `latency_ms`, the raw
+epoch-ms values, every payload field flattened into its own typed column, and
+`_source_file`, `_ingest_ts` for lineage.
+
+**`silver/quarantine`**: every rejected line: `raw_line`, `reject_reason`,
+`_source_file`, `_ingest_ts`. Rules, first match wins:
+
+| reason                       | rule                                           |
+|------------------------------|------------------------------------------------|
+| `unparseable`                | not valid JSON (`_corrupt_record` is set)      |
+| `unsupported_schema_version` | `schema_version` is not 1                      |
+| `missing_required_field`     | key, `event_ts_ms` or `recv_ts_ms` is NULL     |
+| `unknown_msg_type`           | not one of the four known types                |
+| `invalid_seq`                | `seq < 0`                                      |
+
+Design choices:
+
+- **Explicit `_corrupt_record`** instead of "all fields are NULL": the check
+  says what it means and doesn't depend on parser defaults.
+- **One wide table, not one per msg_type.** Loss and latency are computed across
+  all types with the same envelope columns. Unused payload columns are NULL,
+  which Parquet stores almost for free.
+- **Dedupe = first arrival wins**: `ROW_NUMBER() OVER (PARTITION BY key ORDER BY
+  recv_ts_ms, ...) = 1`, with extra ORDER BY columns so ties are deterministic.
+- **MERGE insert-only on the key** (`WHEN NOT MATCHED THEN INSERT`): re-runs insert
+  nothing, and a duplicate that arrives in a later bronze batch is not inserted
+  again. The source must be deduped first, or MERGE would insert both copies.
+- **Full read of bronze each run.** Simple and fine at this size. At scale, read
+  bronze incrementally (streaming + `foreachBatch` running the same MERGE).
+- **Gap detection is SQL** (`sql/silver/gaps.sql`), `LAG(seq)` per stream.
+  It can only see holes between two received messages, so it should find exactly
+  the manifest's `detectable_missing`.
+
+## Gold table (`gold/stream_health`)
+
+One row per stream `(aircraft_id, msg_type)`:
+
+| column | meaning |
+|---|---|
+| `received` | unique messages in silver |
+| `missing` | sum of `missing_count` from `silver/gaps` (0 if none) |
+| `loss_pct` | `100 * missing / (received + missing)` |
+| `received_rate_hz` | `(received - 1) / span_seconds`: N messages span N-1 intervals |
+| `latency_p50_ms` … `latency_p99_ms`, `latency_max_ms` | `recv_ts - event_ts` percentiles |
+| `first_event_ts`, `last_event_ts` | time span of the stream |
+
+Design choices:
+
+- **Metrics in SQL files** (`sql/gold/stream_stats.sql`, `sql/gold/loss.sql`);
+  Python only maps tables to views, joins and writes.
+- **Overwrite, not MERGE.** Gold is a small aggregate over all of silver, so a
+  full recompute is cheap and can never drift. `silver/gaps` is also recomputed:
+  a late message can close or split an old gap, which would make MERGEd gap rows wrong.
+- **Aggregate before joining.** Joining `telemetry` (thousands of rows per stream)
+  to `gaps` (a few rows per stream) before `GROUP BY` multiplies rows and breaks
+  `COUNT(*)` and `SUM`.
+- **LEFT JOIN + COALESCE.** A stream with no gaps has no rows in `gaps`; it must
+  still appear, with `missing = 0`, not NULL and not dropped.
+- **Percentiles, not averages.** A store-and-forward burst barely moves the mean
+  latency but dominates p99, which is what an operator cares about.

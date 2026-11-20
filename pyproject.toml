@@ -7,13 +7,18 @@ name = "uav-telemetry-lakehouse"
 version = "0.1.0"
 description = "Synthetic UAV telemetry through a bronze/silver/gold Delta Lake pipeline"
 requires-python = ">=3.11"
-dependencies = []  # the generator is stdlib only; Spark deps arrive with bronze
+dependencies = []  # the generator is stdlib only
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+# Pinned together: each delta-spark release supports a narrow pyspark range.
+spark = ["pyspark==4.2.0", "delta-spark==4.4.1"]
 
 [project.scripts]
 uav-generate = "uav_lakehouse.generator.__main__:main"
+uav-bronze = "uav_lakehouse.bronze.__main__:main"
+uav-silver = "uav_lakehouse.silver.__main__:main"
+uav-gold = "uav_lakehouse.gold.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
