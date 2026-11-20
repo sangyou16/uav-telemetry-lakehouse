@@ -9,6 +9,7 @@ from __future__ import annotations
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
+from uav_lakehouse.delta_utils import overwrite_delta
 from uav_lakehouse.sql_runner import SQL_DIR, run_sql_file
 
 STREAM_KEY = ["aircraft_id", "msg_type"]
@@ -45,7 +46,4 @@ def build_gold(spark: SparkSession, telemetry_path: str, gaps_path: str, health_
         "first_event_ts",
         "last_event_ts",
     )
-    health.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(
-        health_path
-    )
-    return spark.read.format("delta").load(health_path).count()
+    return overwrite_delta(spark, health, health_path)

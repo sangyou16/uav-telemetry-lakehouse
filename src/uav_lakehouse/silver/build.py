@@ -8,8 +8,9 @@ Two output tables:
 from __future__ import annotations
 
 from pyspark.sql import SparkSession
+from pyspark.sql.utils import is_remote
 
-from uav_lakehouse.delta_utils import merge_insert_new
+from uav_lakehouse.delta_utils import merge_insert_new, read_delta
 
 from .schema import MESSAGE_KEY
 from .transform import dedupe_first_arrival, parse, rejected_lines, valid_messages
@@ -18,8 +19,11 @@ from .transform import dedupe_first_arrival, parse, rejected_lines, valid_messag
 def build_silver(
     spark: SparkSession, bronze_path: str, telemetry_path: str, quarantine_path: str
 ) -> dict[str, int]:
-    bronze = spark.read.format("delta").load(bronze_path)
-    parsed = parse(bronze).cache()  # used twice below: parse once, not twice
+    parsed = parse(read_delta(spark, bronze_path))
+    # Used twice below, so cache it: parse once, not twice. Serverless compute
+    # (Spark Connect, e.g. Databricks Free Edition) has no cache API: skip it there.
+    if not is_remote():
+        parsed = parsed.cache()
 
     try:
         messages = dedupe_first_arrival(valid_messages(parsed))
@@ -32,4 +36,5 @@ def build_silver(
             ),
         }
     finally:
-        parsed.unpersist()
+        if not is_remote():
+            parsed.unpersist()

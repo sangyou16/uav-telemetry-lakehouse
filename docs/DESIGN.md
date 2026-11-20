@@ -188,3 +188,17 @@ Design choices:
   original plan, but its free community edition stopped shipping binaries in
   late 2025 and is no longer maintained.
 - **Checkpoints live in S3 too,** so bronze stays idempotent there (tested).
+
+## Running on Databricks (step 6b)
+
+- **Paths or table names, same code.** `delta_utils` reads, writes, MERGEs and
+  streams to either a path or a catalog name (`workspace.uav.silver_telemetry`);
+  a name has no `/`. `paths.catalog_tables()` gives the Unity Catalog names.
+- **Volumes for files.** Landing files and the bronze streaming checkpoint live in
+  `/Volumes/<catalog>/<schema>/raw`; tables are Unity Catalog managed tables.
+- **Serverless = Spark Connect.** It has no `cache()`, so silver caches only when
+  `pyspark.sql.utils.is_remote()` is false. Bronze counts new rows as
+  "after − before" instead of reading streaming progress objects.
+- **Tested without a workspace.** `tests/test_catalog_tables.py` runs the pipeline
+  with three-part table names on local Spark; `tests/test_databricks_notebook.py`
+  executes the notebook top to bottom with stand-ins for `dbutils` and `display`.

@@ -6,6 +6,8 @@ from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
 
+from uav_lakehouse.delta_utils import read_delta
+
 SQL_DIR = Path(__file__).resolve().parents[2] / "sql"
 
 
@@ -21,8 +23,8 @@ def load_sql(path: Path) -> str:
 def run_sql_file(spark: SparkSession, path: Path, views: dict[str, str]) -> DataFrame:
     """Register each Delta table as a temp view, then run the query in `path`.
 
-    views: {"view_name_used_in_sql": "/path/to/delta/table"}
+    views: {"view_name_used_in_sql": "/path/to/delta/table" or "catalog.schema.table"}
     """
     for name, table_path in views.items():
-        spark.read.format("delta").load(table_path).createOrReplaceTempView(name)
+        read_delta(spark, table_path).createOrReplaceTempView(name)
     return spark.sql(load_sql(path))

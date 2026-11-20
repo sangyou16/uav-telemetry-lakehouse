@@ -16,14 +16,20 @@ from __future__ import annotations
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
+from uav_lakehouse.delta_utils import delta_exists, is_table_name, read_delta
+
 
 def ingest_landing(
     spark: SparkSession, landing_dir: str, bronze_path: str, checkpoint_path: str
 ) -> int:
     """Append any new landing files to the bronze Delta table.
 
+    bronze_path may be a path or a table name; checkpoint_path is always a path
+    (on Databricks, a Unity Catalog volume such as /Volumes/workspace/uav/raw/...).
     Returns the number of rows appended by this call.
     """
+    rows_before = read_delta(spark, bronze_path).count() if delta_exists(spark, bronze_path) else 0
+
     lines = (
         spark.readStream.format("text")
         .option("pathGlobFilter", "*.jsonl")  # skip _manifest.json and anything else
@@ -39,14 +45,14 @@ def ingest_landing(
         F.current_timestamp().alias("_ingest_ts"),
     )
 
-    query = (
+    writer = (
         bronze.writeStream.format("delta")
         .outputMode("append")
         .option("checkpointLocation", checkpoint_path)
         .trigger(availableNow=True)
-        .start(bronze_path)
     )
+    query = writer.toTable(bronze_path) if is_table_name(bronze_path) else writer.start(bronze_path)
     query.awaitTermination()
 
-    # Sum rows over the micro-batches this run produced.
-    return sum(p["numInputRows"] for p in query.recentProgress)
+    # Rows after minus rows before: works the same locally and on serverless.
+    return read_delta(spark, bronze_path).count() - rows_before
