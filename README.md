@@ -111,8 +111,25 @@ python -m uav_lakehouse.bronze      # run it twice: the second run appends 0 row
 python -m uav_lakehouse.silver      # telemetry, quarantine, gaps
 python -m uav_lakehouse.gold        # prints gold/stream_health
 
-pytest                              # 43 tests, ~2 minutes (Spark startup)
+pytest                              # ~50 tests, a few minutes (Spark startup)
 ```
+
+### Run it on S3
+
+The same code runs with the lake in S3: only the paths (`s3a://...`) and the
+Spark config change, the layers don't. `scripts/run_on_s3.sh` starts a local
+S3-compatible server ([moto](https://github.com/getmoto/moto)), uploads the
+landing files, runs every layer against `s3a://lake/...` and lists the bucket.
+
+```bash
+pip install -e ".[dev,spark,s3]"
+bash scripts/run_on_s3.sh           # first run downloads the ~650 MB AWS SDK once
+```
+
+It produces the same numbers as the local run (94,273 → 93,271 + 101 → 602 gaps
+→ 20 streams). A test (`tests/s3/`) runs the real CLIs against a throwaway S3
+server on every CI build. Pointing it at real AWS S3 would mean unsetting
+`S3_ENDPOINT_URL` and using real credentials; this repo stays on free tools.
 
 ## Repo layout
 
@@ -122,6 +139,9 @@ src/uav_lakehouse/
   bronze/      raw lines -> Delta (Structured Streaming)
   silver/      parse, validate, quarantine, dedupe, MERGE; runs gaps.sql
   gold/        runs the gold SQL, joins, writes stream_health
+  paths.py     table locations under a local or s3a:// lake root
+  upload.py    copy landing files to S3
+scripts/run_on_s3.sh       whole pipeline on a local S3 server
 sql/
   silver/gaps.sql          sequence-gap detection (LAG window)
   gold/stream_stats.sql    rate + latency percentiles
@@ -132,7 +152,7 @@ docs/DESIGN.md data model, fault model, table schemas, design choices
 
 ## Tech
 
-PySpark 4.2 · Delta Lake 4.4 · Spark SQL · Python 3.12–3.14 · pytest · ruff ·
+PySpark 4.2 · Delta Lake 4.4 · Spark SQL · S3 (s3a, hadoop-aws) · Python 3.12–3.14 · pytest · ruff ·
 GitHub Actions
 
 ## At larger scale I would change
@@ -154,4 +174,5 @@ GitHub Actions
 | 3 | Silver, including gap detection | done |
 | 4 | Gold: loss %, rate, latency percentiles | done |
 | 5 | CI on every push (lint + all Spark tests, Python 3.12 and 3.14) | done |
-| 6 | S3-compatible storage (MinIO), then Databricks Free Edition | next |
+| 6a | Same pipeline on S3 (`s3a://`), against a local S3-compatible server | done |
+| 6b | Databricks Free Edition | next |

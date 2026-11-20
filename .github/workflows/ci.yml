@@ -19,11 +19,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: actions/cache@v4  # Delta jars downloaded by Spark on first run
+      - uses: actions/cache@v4  # Delta + s3a/AWS SDK jars downloaded by Spark on first run
         with:
           path: ~/.ivy2.5.2
           key: ivy-${{ hashFiles('pyproject.toml') }}
-      - run: pip install -e ".[dev,spark]"
+      - run: pip install -e ".[dev,spark,s3]"
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest

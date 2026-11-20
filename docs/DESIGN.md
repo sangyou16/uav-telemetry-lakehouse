@@ -20,7 +20,7 @@ uav-telemetry-lakehouse/
 │   └── gold/             # step 4: per-aircraft rates, loss %, latency
 ├── sql/                  # step 4: SQL on top of gold (written by hand)
 ├── tests/                # pytest, one folder per layer
-├── infra/                # step 6: MinIO (local S3-compatible storage), Databricks
+├── scripts/              # step 6: run_on_s3.sh (local S3-compatible server)
 ├── docs/                 # this file, architecture diagram
 └── .github/workflows/    # CI: lint + tests
 ```
@@ -171,3 +171,20 @@ Design choices:
   still appear, with `missing = 0`, not NULL and not dropped.
 - **Percentiles, not averages.** A store-and-forward burst barely moves the mean
   latency but dominates p99, which is what an operator cares about.
+
+## Running on S3 (step 6a)
+
+- **Storage-agnostic layers.** Every layer takes table locations as strings;
+  `paths.lake_tables()` builds them under a local folder or an `s3a://` root.
+  No layer code changed to move the lake to S3.
+- **Opt-in S3 support.** `get_spark()` adds the s3a connector only when
+  `S3_ENDPOINT_URL` is set, because its AWS SDK is a ~650 MB download.
+- **`hadoop-aws` version = Hadoop inside pyspark** (3.5.0 for pyspark 4.2). A
+  mismatch fails at runtime with class errors; a unit test guards it.
+- **Credentials from the environment** (`AWS_ACCESS_KEY_ID`, ...), never in code
+  or config files; s3a's default credential chain reads them.
+- **Path-style access** (`http://host/bucket/key`), which local S3 servers need.
+- **Local server: moto**, a pip-installable S3-compatible server. MinIO was the
+  original plan, but its free community edition stopped shipping binaries in
+  late 2025 and is no longer maintained.
+- **Checkpoints live in S3 too,** so bronze stays idempotent there (tested).
