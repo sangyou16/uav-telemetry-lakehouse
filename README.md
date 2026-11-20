@@ -16,7 +16,7 @@ Design, data model and fault model: [docs/DESIGN.md](docs/DESIGN.md)
 | 1 | Generator: N aircraft, 4 message types, injected faults, ground-truth manifest | done |
 | 2 | Bronze: raw lines into Delta, incremental + idempotent (Structured Streaming `availableNow`) | done |
 | 3 | Silver: parse, quarantine, dedupe, MERGE into Delta, sequence-gap detection in SQL | done |
-| 4 | Gold: per-stream received rate, loss %, latency p50/p95/p99 (loss %: SQL exercise in `sql/gold/loss.sql`) | in progress |
+| 4 | Gold: per-stream received rate, loss %, latency p50/p95/p99 | done |
 | 5 | CI | lint + tests running |
 | 6 | S3-compatible storage (MinIO), then Databricks Free Edition | |
 
