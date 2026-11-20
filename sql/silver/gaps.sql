@@ -28,3 +28,17 @@
 -- ============================================================================
 
 -- Write your query below this line (lines starting with -- are ignored).
+SELECT aircraft_id,
+       msg_type,
+       prev_seq,
+       seq                 AS next_seq,
+       seq - prev_seq - 1  AS missing_count,
+       prev_event_ts       AS gap_start_ts,
+       event_ts            AS gap_end_ts
+FROM (
+    SELECT aircraft_id, msg_type, seq, event_ts,
+           LAG(seq)      OVER (PARTITION BY aircraft_id, msg_type ORDER BY seq) AS prev_seq,
+           LAG(event_ts) OVER (PARTITION BY aircraft_id, msg_type ORDER BY seq) AS prev_event_ts
+    FROM telemetry
+)
+WHERE seq - prev_seq > 1
