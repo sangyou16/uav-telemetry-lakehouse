@@ -8,11 +8,10 @@
 # MAGIC
 # MAGIC **Run:** open this notebook from a Git folder of the repo and click **Run all**.
 # MAGIC
-# MAGIC | what | where |
-# MAGIC |---|---|
-# MAGIC | landing files + bronze checkpoint | volume `/Volumes/<catalog>/<schema>/raw` |
-# MAGIC | tables | `<catalog>.<schema>.` + `bronze_telemetry_raw`, `silver_telemetry`, |
-# MAGIC | | `silver_quarantine`, `silver_gaps`, `gold_stream_health` |
+# MAGIC **Where things go** (`<catalog>.<schema>` defaults to `workspace.uav`):
+# MAGIC - Files (landing + bronze checkpoint): volume `/Volumes/<catalog>/<schema>/raw`
+# MAGIC - Tables: `bronze_telemetry_raw`, `silver_telemetry`, `silver_quarantine`,
+# MAGIC   `silver_gaps`, `gold_stream_health`
 
 # COMMAND ----------
 
