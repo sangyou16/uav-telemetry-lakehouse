@@ -107,3 +107,39 @@ Per stream `(aircraft_id, msg_type)`:
   = process only new files, then stop. Re-runs are idempotent at the file level.
 - **Why no partitioning?** ~100k rows. Partitioning tiny tables creates many
   tiny files and slows reads. Revisit at real volume (e.g. by ingest date).
+
+## Silver tables
+
+**`silver/telemetry`**: one row per message key `(aircraft_id, msg_type, seq)`.
+Columns: the key, `event_ts`, `recv_ts` (UTC timestamps), `latency_ms`, the raw
+epoch-ms values, every payload field flattened into its own typed column, and
+`_source_file`, `_ingest_ts` for lineage.
+
+**`silver/quarantine`**: every rejected line: `raw_line`, `reject_reason`,
+`_source_file`, `_ingest_ts`. Rules, first match wins:
+
+| reason                       | rule                                           |
+|------------------------------|------------------------------------------------|
+| `unparseable`                | not valid JSON (`_corrupt_record` is set)      |
+| `unsupported_schema_version` | `schema_version` is not 1                      |
+| `missing_required_field`     | key, `event_ts_ms` or `recv_ts_ms` is NULL     |
+| `unknown_msg_type`           | not one of the four known types                |
+| `invalid_seq`                | `seq < 0`                                      |
+
+Design choices:
+
+- **Explicit `_corrupt_record`** instead of "all fields are NULL": the check
+  says what it means and doesn't depend on parser defaults.
+- **One wide table, not one per msg_type.** Loss and latency are computed across
+  all types with the same envelope columns. Unused payload columns are NULL,
+  which Parquet stores almost for free.
+- **Dedupe = first arrival wins**: `ROW_NUMBER() OVER (PARTITION BY key ORDER BY
+  recv_ts_ms, ...) = 1`, with extra ORDER BY columns so ties are deterministic.
+- **MERGE insert-only on the key** (`WHEN NOT MATCHED THEN INSERT`): re-runs insert
+  nothing, and a duplicate that arrives in a later bronze batch is not inserted
+  again. The source must be deduped first, or MERGE would insert both copies.
+- **Full read of bronze each run.** Simple and fine at this size. At scale, read
+  bronze incrementally (streaming + `foreachBatch` running the same MERGE).
+- **Gap detection is SQL** (`sql/silver/gaps.sql`), `LAG(seq)` per stream.
+  It can only see holes between two received messages, so it should find exactly
+  the manifest's `detectable_missing`.

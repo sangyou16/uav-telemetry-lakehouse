@@ -15,7 +15,7 @@ Design, data model and fault model: [docs/DESIGN.md](docs/DESIGN.md)
 |------|------|--------|
 | 1 | Generator: N aircraft, 4 message types, injected faults, ground-truth manifest | done |
 | 2 | Bronze: raw lines into Delta, incremental + idempotent (Structured Streaming `availableNow`) | done |
-| 3 | Silver: parse, dedupe, schema, gap detection | next |
+| 3 | Silver: parse, quarantine, dedupe, MERGE into Delta (gap detection: SQL exercise in `sql/silver/gaps.sql`) | in progress |
 | 4 | Gold + SQL: rates, loss %, latency | |
 | 5 | CI | lint + tests running |
 | 6 | S3-compatible storage (MinIO), then Databricks Free Edition | |
@@ -29,6 +29,7 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,spark]"
 python -m uav_lakehouse.generator --aircraft 5 --duration 600 --seed 42
 python -m uav_lakehouse.bronze      # run it twice: the second run appends 0 rows
+python -m uav_lakehouse.silver
 pytest
 ```
 
@@ -40,3 +41,7 @@ Bronze then holds every raw line (94,273 rows, corrupt ones included) in
 `data/lake/bronze/telemetry_raw`, with `_source_file`, `_source_file_mtime` and
 `_ingest_ts` columns. A checkpoint in `data/lake/_checkpoints/bronze` records which
 files are done, so re-runs never duplicate rows.
+
+Silver turns those into `silver/telemetry` (93,271 unique, typed messages: one
+per key, first arrival wins) and `silver/quarantine` (the 101 corrupt lines, each
+with a reason). Both numbers equal the generator's ground truth.
