@@ -137,7 +137,8 @@ server on every CI build. Pointing it at real AWS S3 would mean unsetting
 (serverless): tables in Unity Catalog (`workspace.uav.silver_telemetry`, ...),
 landing files and the streaming checkpoint in a volume. Add the repo as a Git
 folder, open the notebook, **Run all**. Its last cells check the results against
-the ground truth and show example SQL on the gold table.
+the ground truth and show example SQL on the gold table. On Databricks Free
+Edition it reproduces the local numbers exactly (93,271 / 101 / 1,228).
 
 ## Repo layout
 
@@ -184,4 +185,4 @@ GitHub Actions
 | 4 | Gold: loss %, rate, latency percentiles | done |
 | 5 | CI on every push (lint + all Spark tests, Python 3.12 and 3.14) | done |
 | 6a | Same pipeline on S3 (`s3a://`), against a local S3-compatible server | done |
-| 6b | Databricks Free Edition: notebook with Unity Catalog tables + volume | code ready, first workspace run pending |
+| 6b | Databricks Free Edition (serverless): Unity Catalog tables + volume, results match ground truth | done |
