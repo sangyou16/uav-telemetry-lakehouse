@@ -29,3 +29,22 @@
 -- ============================================================================
 
 -- Write your query below this line (lines starting with -- are ignored).
+WITH r AS (
+    SELECT aircraft_id, msg_type, COUNT(*) AS received
+    FROM telemetry
+    GROUP BY aircraft_id, msg_type
+),
+m AS (
+    SELECT aircraft_id, msg_type, SUM(missing_count) AS missing
+    FROM gaps
+    GROUP BY aircraft_id, msg_type
+)
+SELECT r.aircraft_id,
+       r.msg_type,
+       r.received,
+       COALESCE(m.missing, 0)                                             AS missing,
+       ROUND(100.0 * COALESCE(m.missing, 0)
+             / (r.received + COALESCE(m.missing, 0)), 3)                  AS loss_pct
+FROM r
+LEFT JOIN m
+  ON r.aircraft_id = m.aircraft_id AND r.msg_type = m.msg_type
