@@ -8,6 +8,7 @@ from pathlib import Path
 from uav_lakehouse.spark import get_spark
 
 from .build import build_silver
+from .gaps import build_gaps
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -21,6 +22,7 @@ def main(argv: list[str] | None = None) -> None:
         "telemetry_path": str(lake / "silver" / "telemetry"),
         "quarantine_path": str(lake / "silver" / "quarantine"),
     }
+    gaps_path = str(lake / "silver" / "gaps")
     spark = get_spark("silver")
     try:
         counts = build_silver(spark, **paths)
@@ -30,6 +32,12 @@ def main(argv: list[str] | None = None) -> None:
         spark.read.format("delta").load(paths["quarantine_path"]).groupBy(
             "reject_reason"
         ).count().show()
+
+        try:
+            n_gaps = build_gaps(spark, paths["telemetry_path"], gaps_path)
+            print(f"gaps        {n_gaps:,} rows (from sql/silver/gaps.sql)")
+        except NotImplementedError:
+            print("gaps        skipped: write your query in sql/silver/gaps.sql")
     finally:
         spark.stop()
 

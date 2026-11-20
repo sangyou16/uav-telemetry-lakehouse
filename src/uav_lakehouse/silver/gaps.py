@@ -1,4 +1,4 @@
-"""Run the hand-written gap-detection SQL against the silver telemetry table."""
+"""Run the hand-written gap-detection SQL and store the result as silver/gaps."""
 
 from __future__ import annotations
 
@@ -6,18 +6,21 @@ from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession
 
-GAPS_SQL = Path(__file__).resolve().parents[3] / "sql" / "silver" / "gaps.sql"
+from uav_lakehouse.sql_runner import SQL_DIR, run_sql_file
 
-
-def load_sql(path: Path = GAPS_SQL) -> str:
-    """Return the query, ignoring comment lines. Raises if none has been written yet."""
-    lines = [ln for ln in path.read_text().splitlines() if not ln.strip().startswith("--")]
-    query = "\n".join(lines).strip().rstrip(";")
-    if not query:
-        raise NotImplementedError(f"no query written yet in {path}")
-    return query
+GAPS_SQL = SQL_DIR / "silver" / "gaps.sql"
 
 
 def detect_gaps(spark: SparkSession, telemetry_path: str, sql_path: Path = GAPS_SQL) -> DataFrame:
-    spark.read.format("delta").load(telemetry_path).createOrReplaceTempView("telemetry")
-    return spark.sql(load_sql(sql_path))
+    return run_sql_file(spark, sql_path, {"telemetry": telemetry_path})
+
+
+def build_gaps(spark: SparkSession, telemetry_path: str, gaps_path: str) -> int:
+    """Recompute all gaps and overwrite the table. Returns the number of gaps.
+
+    Overwrite, not MERGE: a late message can split or close an existing gap,
+    so old gap rows may become wrong. Recomputing is simple and always correct.
+    """
+    gaps = detect_gaps(spark, telemetry_path)
+    gaps.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(gaps_path)
+    return spark.read.format("delta").load(gaps_path).count()

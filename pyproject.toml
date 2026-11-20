@@ -17,6 +17,8 @@ spark = ["pyspark==4.2.0", "delta-spark==4.4.1"]
 [project.scripts]
 uav-generate = "uav_lakehouse.generator.__main__:main"
 uav-bronze = "uav_lakehouse.bronze.__main__:main"
+uav-silver = "uav_lakehouse.silver.__main__:main"
+uav-gold = "uav_lakehouse.gold.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

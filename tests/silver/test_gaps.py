@@ -9,12 +9,13 @@ from uav_lakehouse.generator.config import SimConfig
 from uav_lakehouse.generator.simulate import simulate
 from uav_lakehouse.generator.writer import write_run
 from uav_lakehouse.silver.build import build_silver
-from uav_lakehouse.silver.gaps import detect_gaps, load_sql
+from uav_lakehouse.silver.gaps import GAPS_SQL, detect_gaps
+from uav_lakehouse.sql_runner import load_sql
 
 CFG = SimConfig(n_aircraft=2, duration_s=120, seed=3)
 
 try:
-    load_sql()
+    load_sql(GAPS_SQL)
 except NotImplementedError:
     pytest.skip("write your query in sql/silver/gaps.sql first", allow_module_level=True)
 
